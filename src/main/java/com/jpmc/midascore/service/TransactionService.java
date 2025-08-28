@@ -1,5 +1,6 @@
 package com.jpmc.midascore.service;
 
+import com.jpmc.midascore.client.IncentiveClient;
 import com.jpmc.midascore.entity.TransactionRecord;
 import com.jpmc.midascore.entity.UserRecord;
 import com.jpmc.midascore.foundation.Transaction;
@@ -16,11 +17,15 @@ public class TransactionService {
 
     private final UserRepository userRepository;
     private final TransactionRepository transactionRepository;
+    private final IncentiveClient incentiveClient;
+
 
     public TransactionService(UserRepository userRepository,
-                              TransactionRepository transactionRepository) {
+                              TransactionRepository transactionRepository,
+                               IncentiveClient incentiveClient) {
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
+        this.incentiveClient = incentiveClient;
     }
 
     // To Validate and persist a transaction. If invalid, do nothing
@@ -56,12 +61,19 @@ public class TransactionService {
         sender.setBalance(sender.getBalance() - amount);
         recipient.setBalance(recipient.getBalance() + amount);
 
+        // To fetch incentive from REST API and apply to recipient ONLY
+        float incentive = incentiveClient.fetchIncentive(tx);
+        if (incentive > 0f) {
+            recipient.setBalance(recipient.getBalance() + incentive);
+        }
+
+
         // To persist everything atomically
         userRepository.save(sender);
         userRepository.save(recipient);
 
-        transactionRepository.save(new TransactionRecord(sender, recipient, amount));
+        transactionRepository.save(new TransactionRecord(sender, recipient, amount, incentive));
 
-        log.debug("Recorded tx: {} -> {} amount={}", senderId, recipientId, amount);
+        log.debug("Recorded tx: {} -> {} amount={}, incentive={}", senderId, recipientId, amount, incentive);
     }
 }
